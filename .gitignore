@@ -1,0 +1,13 @@
+__pycache__/
+qdrant_storage/
+documents/
+*.pyc
+.venv/
+venv/
+.env
+*.log
+*ipynb_checkpoints/
+.DS_Store
+.vscode/
+
+environment.ipynb
