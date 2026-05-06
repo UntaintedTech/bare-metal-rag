@@ -1,5 +1,7 @@
 from ingestion import ingestor
+from QdrantIndexer import indexer
+
 
 payload = ingestor.run_pipeline()
 
-print(payload)
+indexer.run_indexer(payload)
