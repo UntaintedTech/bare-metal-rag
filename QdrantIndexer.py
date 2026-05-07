@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
@@ -12,7 +13,7 @@ class VectorStoreIndexer:
     def __init__(
             self,
             collection_name: str = 'IT_Knowledge_collection',
-            # batch_size: int,
+            top_k: int = 3,
             vector_size: int = 1024,
             embedding_model: str = "BAAI/bge-m3",
             distance_metric = Distance.COSINE,
@@ -20,7 +21,7 @@ class VectorStoreIndexer:
     ):
         # self.qdrant_url = qdrant_url
         self.collection_name = collection_name
-        # self.batch_size = batch_size
+        self.top_k = top_k
         self.embedding_model = embedding_model
         self.distance_metric = distance_metric
         self.vector_size = vector_size
@@ -55,9 +56,12 @@ class VectorStoreIndexer:
     def _build_points(self, payloads, vectors) -> list:
         points = []
         #  change the index for uuid after development pahse
-        for index, (payload, vector) in enumerate(zip(payloads, vectors)):
-            point_id = index
-            points.append(PointStruct(id=point_id, vector=vector, payload=payload))
+        if len(payloads) == len(vectors):
+            for index, (payload, vector) in enumerate(zip(payloads, vectors)):
+                point_id = index
+                points.append(PointStruct(id=point_id, vector=vector, payload=payload))
+        else:
+            print("Payload length and vector length mismatched.")
         
         return points
 
@@ -68,11 +72,44 @@ class VectorStoreIndexer:
             wait=True,
             points=point_struct
             )
-
         return operation_info.status
+    
+    def _parse_search_results(self, results: list) -> list[dict]:
+        parsed_results = []
 
-    def _search(self):
-        pass
+        for result in results:
+            score = result.score
+            text = result.payload["text"]
+            source_file = result.payload["source_file"]
+            page_start = result.payload["page_start"]
+            page_end = result.payload["page_end"]
+            chunk_id = result.payload["chunk_id"]
+
+            parsed_result = {
+                "score": score,
+                "text": text,
+                "source_file": source_file,
+                "page_start": page_start,
+                "page_end": page_end,
+                "chunk_id": chunk_id,
+            }
+            parsed_results.append(parsed_result)
+        
+        return parsed_results
+
+    def vector_search(self, query_string: str, top_k=None) -> list[dict]:
+        search_item = self._embed_text(query_string)
+
+        search_result = self.client.query_points(
+            collection_name=self.collection_name,
+            query=search_item,
+            with_payload=True,
+            limit=top_k or self.top_k
+        ).points
+
+        parsed_results = self._parse_search_results(search_result)
+        return parsed_results
+
 
     def run_indexer(self, payloads: list[dict]):
         if self.client.collection_exists(collection_name=f"{self.collection_name}"): 
